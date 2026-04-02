@@ -1,3 +1,0 @@
-Data model definitions
-* Aircraft Speed = Air speed, NOT ground speed
-* Aircraft Altitude = Barometric altitude, NOT geometric altitude
