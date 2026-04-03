@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, PieChart, Pie, Cell, Customized } from "recharts";
 import { Plane, TrendingUp, TrendingDown, Activity, Filter, X, MessageSquare } from "lucide-react";
 import ResizableChatLayout, { useChatLayout } from "@/components/resizable-chat-layout";
 
@@ -167,7 +167,7 @@ export function AircraftDashboard() {
   const pieData = data.map(item => ({
     name: item.aircraft_category,
     value: parseInt(item.unique_aircraft_count),
-    color: CATEGORY_COLORS[item.aircraft_category as keyof typeof CATEGORY_COLORS] || "#8884d8",
+    fill: CATEGORY_COLORS[item.aircraft_category as keyof typeof CATEGORY_COLORS] || "#8884d8",
   }));
 
   if (loading) {
@@ -290,6 +290,66 @@ function DashboardContent({
   fetchData: () => void;
 }) {
   const { toggleChat } = useChatLayout();
+
+  const HUD_SHADES = ["#00ffc3", "#00e6af", "#00cc9c", "#00b388", "#009974", "#008061", "#00664d", "#004d3a"];
+
+  const pieDataHUD = [...pieData]
+    .sort((a, b) => a.value - b.value)
+    .map((item, index, arr) => ({
+      ...item,
+      fill: index === arr.length - 1 ? "#ef4444" : HUD_SHADES[index % HUD_SHADES.length]
+    }));
+
+  // Calculate needle targeting exactly the center of the danger zone
+  let maxCategoryVal = 0;
+  pieDataHUD.forEach(d => {
+    if (d.value > maxCategoryVal) maxCategoryVal = d.value;
+  });
+  let accumulated = 0;
+  let needleTarget = 0;
+  pieDataHUD.forEach(d => {
+    if (d.value === maxCategoryVal && needleTarget === 0) {
+      needleTarget = accumulated + d.value / 2;
+    }
+    accumulated += d.value;
+  });
+
+  const NeedleComponent = (props: any) => {
+    const { width, height, viewBox } = props;
+    const w = width || viewBox?.width || 400;
+    const h = (height || viewBox?.height || 300);
+    const cx = w / 2;
+    const cy = h * 0.90; // cy="90%"
+    
+    // Recharts strictly limits 100% radius to the smaller of width/height divided by 2
+    const maxRadius = Math.min(w, h) / 2;
+    const iR = maxRadius * 1.0;  // equivalent to innerRadius="100%"
+    const oR = maxRadius * 1.80; // equivalent to outerRadius="180%"
+
+    let total = 0;
+    pieDataHUD.forEach((v) => {
+      total += v.value;
+    });
+    const RADIAN = Math.PI / 180;
+    const ang = 180.0 * (1 - needleTarget / total);
+    const length = (iR + 2 * oR) / 3;
+    const sin = Math.sin(-RADIAN * ang);
+    const cos = Math.cos(-RADIAN * ang);
+    const r = 6;
+    const xba = cx + r * sin;
+    const yba = cy - r * cos;
+    const xbb = cx - r * sin;
+    const ybb = cy + r * cos;
+    const xp = cx + length * cos;
+    const yp = cy + length * sin;
+
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={r} fill="#fff" stroke="#00ccff" strokeWidth={2} />
+        <path d={`M${xba} ${yba}L${xbb} ${ybb} L${xp} ${yp} Z`} stroke="none" fill="#00ccff" style={{ filter: "drop-shadow(0px 0px 5px rgba(0, 204, 255, 0.5))" }} />
+      </g>
+    );
+  };
 
   return (
     <div className="h-full overflow-auto">
@@ -504,34 +564,50 @@ function DashboardContent({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig}>
+            <ChartContainer config={chartConfig} className="aspect-[2/1] w-full pb-0 [&_.recharts-pie]:translate-y-4">
               <PieChart>
                 <Pie
-                  data={pieData}
+                  data={pieDataHUD}
                   cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(props) => {
-                    const { cx, cy, midAngle, outerRadius, name, percent } = props;
-                    const RADIAN = Math.PI / 180;
-                    const radius = outerRadius * 1.2;
-                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                    return (
-                      <text x={x} y={y} fill="#E9E9E9" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" fontSize={12}>
-                        {`${name} ${(percent * 100).toFixed(0)}%`}
-                      </text>
-                    );
-                  }}
-                  outerRadius={80}
-                  fill="#8884d8"
+                  cy="90%"
+                  startAngle={180}
+                  endAngle={0}
+                  innerRadius="100%"
+                  outerRadius="180%"
                   dataKey="value"
+                  nameKey="name"
+                  stroke="#1e293b"
+                  strokeWidth={3}
+                  paddingAngle={0}
+                  minAngle={3}
                 >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {pieDataHUD.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <Customized component={NeedleComponent} />
+                <ChartTooltip 
+                  content={
+                    <ChartTooltipContent 
+                      formatter={(value, name, item) => (
+                        <>
+                          <div
+                            className="h-3 w-3 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: item.payload.fill }}
+                          />
+                          <div className="flex flex-1 justify-between leading-none items-center">
+                            <span className="text-muted-foreground mr-4">
+                              {name}
+                            </span>
+                            <span className="text-foreground font-mono font-medium tabular-nums">
+                              {value.toLocaleString()}
+                            </span>
+                          </div>
+                        </>
+                      )} 
+                    />
+                  } 
+                />
               </PieChart>
             </ChartContainer>
           </CardContent>
