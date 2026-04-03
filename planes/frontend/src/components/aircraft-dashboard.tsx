@@ -84,15 +84,15 @@ const CATEGORY_DESCRIPTIONS = {
 const chartConfig = {
   altitude: {
     label: "Altitude (ft)",
-    color: "hsl(var(--chart-1))",
+    color: "#2CE3D7",
   },
   speed: {
     label: "Speed (kts)",
-    color: "hsl(var(--chart-2))",
+    color: "#2CE3D7",
   },
   count: {
     label: "Aircraft Count",
-    color: "hsl(var(--chart-3))",
+    color: "#2CE3D7",
   },
 };
 
@@ -217,6 +217,43 @@ export function AircraftDashboard() {
       />
     </ResizableChatLayout>
   );
+}
+
+function GaugeCard({ title, value, description, icon: Icon }: { title: string, value: React.ReactNode, description: string, icon: any }) {
+  return (
+    <div className="relative flex flex-col items-center justify-center p-6 w-64 h-64 mx-auto rounded-full">
+      {/* Outer Cyan Glow behind ticks */}
+      <div className="absolute inset-2 rounded-full shadow-[0_0_30px_rgba(44,227,215,0.15)] pointer-events-none" />
+      {/* Ticks SVG */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none rounded-full" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+         {/* Inner Circle line */}
+         <circle cx="50" cy="50" r="46" fill="none" stroke="#1B4C48" strokeWidth="0.5" />
+         {Array.from({ length: 60 }).map((_, i) => (
+           <line
+             key={i}
+             x1="99"
+             y1="50"
+             x2={i % 5 === 0 ? "93" : "96"} 
+             y2="50"
+             stroke={i % 5 === 0 ? "#2CE3D7" : "#1B4C48"}
+             strokeWidth="0.5"
+             transform={`rotate(${(i * 360) / 60} 50 50)`}
+           />
+         ))}
+      </svg>
+      {/* Content */}
+      <div className="absolute top-[22%] flex flex-col items-center">
+        <Icon className="w-5 h-5 text-[#E9E9E9] mb-1 opacity-80" />
+        <h3 className="text-[#E9E9E9] text-sm font-medium">{title}</h3>
+      </div>
+      
+      <div className="text-5xl font-light text-[#2CE3D7] tracking-tight">{value}</div>
+      
+      <div className="absolute bottom-[23%] w-[80%] flex justify-center">
+        <p className="text-xs text-[#939393] text-center leading-tight">{description}</p>
+      </div>
+    </div>
+  )
 }
 
 function DashboardContent({
@@ -360,58 +397,11 @@ function DashboardContent({
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Aircraft</CardTitle>
-            <Plane className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalAircraft.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Unique aircraft tracked
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Records</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRecords.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Data points collected
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Altitude</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft</div>
-            <p className="text-xs text-muted-foreground">
-              Barometric altitude
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Speed</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts</div>
-            <p className="text-xs text-muted-foreground">
-              Ground speed
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 py-4">
+        <GaugeCard title="Total Aircraft" value={totalAircraft.toLocaleString()} description="Unique aircraft tracked" icon={Plane} />
+        <GaugeCard title="Total Records" value={totalRecords.toLocaleString()} description="Data points collected" icon={Activity} />
+        <GaugeCard title="Avg Altitude" value={`${avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} description="Barometric altitude" icon={TrendingUp} />
+        <GaugeCard title="Avg Speed" value={`${avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts`} description="Ground speed" icon={TrendingDown} />
       </div>
 
       {/* Charts Grid */}
@@ -427,9 +417,9 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <BarChart data={sortedData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="aircraft_category" />
-                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
+                <XAxis dataKey="aircraft_category" tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="avg_barometric_altitude"
@@ -452,9 +442,9 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <BarChart data={sortedData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="aircraft_category" />
-                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
+                <XAxis dataKey="aircraft_category" tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="avg_ground_speed"
@@ -477,16 +467,22 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <ScatterChart data={scatterData}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
                 <XAxis
                   dataKey="altitude"
                   name="Altitude (ft)"
                   type="number"
+                  tick={{fill: '#E9E9E9', fontSize: 11}}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
                   dataKey="speed"
                   name="Speed (kts)"
                   type="number"
+                  tick={{fill: '#E9E9E9', fontSize: 11}}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Scatter
@@ -515,7 +511,18 @@ function DashboardContent({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={(props) => {
+                    const { cx, cy, midAngle, outerRadius, name, percent } = props;
+                    const RADIAN = Math.PI / 180;
+                    const radius = outerRadius * 1.2;
+                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                    return (
+                      <text x={x} y={y} fill="#E9E9E9" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" fontSize={12}>
+                        {`${name} ${(percent * 100).toFixed(0)}%`}
+                      </text>
+                    );
+                  }}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
