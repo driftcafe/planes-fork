@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, PieChart, Pie, Cell, Customized } from "recharts";
 import { Plane, TrendingUp, TrendingDown, Activity, Filter, X, MessageSquare } from "lucide-react";
 import ResizableChatLayout, { useChatLayout } from "@/components/resizable-chat-layout";
 
@@ -84,15 +84,15 @@ const CATEGORY_DESCRIPTIONS = {
 const chartConfig = {
   altitude: {
     label: "Altitude (ft)",
-    color: "hsl(var(--chart-1))",
+    color: "#2CE3D7",
   },
   speed: {
     label: "Speed (kts)",
-    color: "hsl(var(--chart-2))",
+    color: "#2CE3D7",
   },
   count: {
     label: "Aircraft Count",
-    color: "hsl(var(--chart-3))",
+    color: "#2CE3D7",
   },
 };
 
@@ -167,7 +167,7 @@ export function AircraftDashboard() {
   const pieData = data.map(item => ({
     name: item.aircraft_category,
     value: parseInt(item.unique_aircraft_count),
-    color: CATEGORY_COLORS[item.aircraft_category as keyof typeof CATEGORY_COLORS] || "#8884d8",
+    fill: CATEGORY_COLORS[item.aircraft_category as keyof typeof CATEGORY_COLORS] || "#8884d8",
   }));
 
   if (loading) {
@@ -219,6 +219,43 @@ export function AircraftDashboard() {
   );
 }
 
+function GaugeCard({ title, value, description, icon: Icon }: { title: string, value: React.ReactNode, description: string, icon: any }) {
+  return (
+    <div className="relative flex flex-col items-center justify-center p-6 w-64 h-64 mx-auto rounded-full">
+      {/* Outer Cyan Glow behind ticks */}
+      <div className="absolute inset-2 rounded-full shadow-[0_0_30px_rgba(44,227,215,0.15)] pointer-events-none" />
+      {/* Ticks SVG */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none rounded-full" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+         {/* Inner Circle line */}
+         <circle cx="50" cy="50" r="46" fill="none" stroke="#1B4C48" strokeWidth="0.5" />
+         {Array.from({ length: 60 }).map((_, i) => (
+           <line
+             key={i}
+             x1="99"
+             y1="50"
+             x2={i % 5 === 0 ? "93" : "96"} 
+             y2="50"
+             stroke={i % 5 === 0 ? "#2CE3D7" : "#1B4C48"}
+             strokeWidth="0.5"
+             transform={`rotate(${(i * 360) / 60} 50 50)`}
+           />
+         ))}
+      </svg>
+      {/* Content */}
+      <div className="absolute top-[22%] flex flex-col items-center">
+        <Icon className="w-5 h-5 text-[#E9E9E9] mb-1 opacity-80" />
+        <h3 className="text-[#E9E9E9] text-sm font-medium">{title}</h3>
+      </div>
+      
+      <div className="text-5xl font-light text-[#2CE3D7] tracking-tight">{value}</div>
+      
+      <div className="absolute bottom-[23%] w-[80%] flex justify-center">
+        <p className="text-xs text-[#939393] text-center leading-tight">{description}</p>
+      </div>
+    </div>
+  )
+}
+
 function DashboardContent({
   data,
   sortedData,
@@ -253,6 +290,66 @@ function DashboardContent({
   fetchData: () => void;
 }) {
   const { toggleChat } = useChatLayout();
+
+  const HUD_SHADES = ["#00ffc3", "#00e6af", "#00cc9c", "#00b388", "#009974", "#008061", "#00664d", "#004d3a"];
+
+  const pieDataHUD = [...pieData]
+    .sort((a, b) => a.value - b.value)
+    .map((item, index, arr) => ({
+      ...item,
+      fill: index === arr.length - 1 ? "#ef4444" : HUD_SHADES[index % HUD_SHADES.length]
+    }));
+
+  // Calculate needle targeting exactly the center of the danger zone
+  let maxCategoryVal = 0;
+  pieDataHUD.forEach(d => {
+    if (d.value > maxCategoryVal) maxCategoryVal = d.value;
+  });
+  let accumulated = 0;
+  let needleTarget = 0;
+  pieDataHUD.forEach(d => {
+    if (d.value === maxCategoryVal && needleTarget === 0) {
+      needleTarget = accumulated + d.value / 2;
+    }
+    accumulated += d.value;
+  });
+
+  const NeedleComponent = (props: any) => {
+    const { width, height, viewBox } = props;
+    const w = width || viewBox?.width || 400;
+    const h = (height || viewBox?.height || 300);
+    const cx = w / 2;
+    const cy = h * 0.90; // cy="90%"
+    
+    // Recharts strictly limits 100% radius to the smaller of width/height divided by 2
+    const maxRadius = Math.min(w, h) / 2;
+    const iR = maxRadius * 1.0;  // equivalent to innerRadius="100%"
+    const oR = maxRadius * 1.80; // equivalent to outerRadius="180%"
+
+    let total = 0;
+    pieDataHUD.forEach((v) => {
+      total += v.value;
+    });
+    const RADIAN = Math.PI / 180;
+    const ang = 180.0 * (1 - needleTarget / total);
+    const length = (iR + 2 * oR) / 3;
+    const sin = Math.sin(-RADIAN * ang);
+    const cos = Math.cos(-RADIAN * ang);
+    const r = 6;
+    const xba = cx + r * sin;
+    const yba = cy - r * cos;
+    const xbb = cx - r * sin;
+    const ybb = cy + r * cos;
+    const xp = cx + length * cos;
+    const yp = cy + length * sin;
+
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={r} fill="#fff" stroke="#00ccff" strokeWidth={2} />
+        <path d={`M${xba} ${yba}L${xbb} ${ybb} L${xp} ${yp} Z`} stroke="none" fill="#00ccff" style={{ filter: "drop-shadow(0px 0px 5px rgba(0, 204, 255, 0.5))" }} />
+      </g>
+    );
+  };
 
   return (
     <div className="h-full overflow-auto">
@@ -360,58 +457,11 @@ function DashboardContent({
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Aircraft</CardTitle>
-            <Plane className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalAircraft.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Unique aircraft tracked
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Records</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRecords.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Data points collected
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Altitude</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft</div>
-            <p className="text-xs text-muted-foreground">
-              Barometric altitude
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Speed</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts</div>
-            <p className="text-xs text-muted-foreground">
-              Ground speed
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 py-4">
+        <GaugeCard title="Total Aircraft" value={totalAircraft.toLocaleString()} description="Unique aircraft tracked" icon={Plane} />
+        <GaugeCard title="Total Records" value={totalRecords.toLocaleString()} description="Data points collected" icon={Activity} />
+        <GaugeCard title="Avg Altitude" value={`${avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} description="Barometric altitude" icon={TrendingUp} />
+        <GaugeCard title="Avg Speed" value={`${avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts`} description="Ground speed" icon={TrendingDown} />
       </div>
 
       {/* Charts Grid */}
@@ -427,9 +477,9 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <BarChart data={sortedData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="aircraft_category" />
-                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
+                <XAxis dataKey="aircraft_category" tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="avg_barometric_altitude"
@@ -452,9 +502,9 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <BarChart data={sortedData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="aircraft_category" />
-                <YAxis />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
+                <XAxis dataKey="aircraft_category" tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fill: '#E9E9E9', fontSize: 11}} axisLine={false} tickLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="avg_ground_speed"
@@ -477,16 +527,22 @@ function DashboardContent({
           <CardContent>
             <ChartContainer config={chartConfig}>
               <ScatterChart data={scatterData}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1B4C48" vertical={false} />
                 <XAxis
                   dataKey="altitude"
                   name="Altitude (ft)"
                   type="number"
+                  tick={{fill: '#E9E9E9', fontSize: 11}}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
                   dataKey="speed"
                   name="Speed (kts)"
                   type="number"
+                  tick={{fill: '#E9E9E9', fontSize: 11}}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Scatter
@@ -508,23 +564,50 @@ function DashboardContent({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig}>
+            <ChartContainer config={chartConfig} className="aspect-[2/1] w-full pb-0 [&_.recharts-pie]:translate-y-4">
               <PieChart>
                 <Pie
-                  data={pieData}
+                  data={pieDataHUD}
                   cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
+                  cy="90%"
+                  startAngle={180}
+                  endAngle={0}
+                  innerRadius="100%"
+                  outerRadius="180%"
                   dataKey="value"
+                  nameKey="name"
+                  stroke="#1e293b"
+                  strokeWidth={3}
+                  paddingAngle={0}
+                  minAngle={3}
                 >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {pieDataHUD.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <Customized component={NeedleComponent} />
+                <ChartTooltip 
+                  content={
+                    <ChartTooltipContent 
+                      formatter={(value, name, item) => (
+                        <>
+                          <div
+                            className="h-3 w-3 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: item.payload.fill }}
+                          />
+                          <div className="flex flex-1 justify-between leading-none items-center">
+                            <span className="text-muted-foreground mr-4">
+                              {name}
+                            </span>
+                            <span className="text-foreground font-mono font-medium tabular-nums">
+                              {value.toLocaleString()}
+                            </span>
+                          </div>
+                        </>
+                      )} 
+                    />
+                  } 
+                />
               </PieChart>
             </ChartContainer>
           </CardContent>
