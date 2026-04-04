@@ -234,10 +234,14 @@ export function AircraftDashboard() {
 }
 
 function GaugeCard({ title, value, description, icon: Icon, lastUpdated }: { title: string, value: React.ReactNode, description: string, icon: any, lastUpdated?: Date | null }) {
-  const updateKey = lastUpdated?.getTime() || 'init';
+  const [hoverCount, setHoverCount] = useState(0);
+  const updateKey = `${lastUpdated?.getTime() || 'init'}-${hoverCount}`;
   
   return (
-    <div className="relative flex flex-col items-center justify-center p-6 w-64 h-64 mx-auto rounded-full">
+    <div 
+      className="relative flex flex-col items-center justify-center p-6 w-64 h-64 mx-auto rounded-full cursor-pointer"
+      onMouseEnter={() => setHoverCount(prev => prev + 1)}
+    >
       <style>{`
         @keyframes gaugePulse {
           0% { box-shadow: 0 0 10px rgba(44,227,215,0.1); transform: scale(0.95); opacity: 0.8; }
@@ -631,7 +635,7 @@ function DashboardContent({
                 {sortedData.map((item) => (
                   <tr key={item.aircraft_category} className="border-b hover:bg-muted/50">
                     <td className="p-3">
-                      <Badge style={{ backgroundColor: CATEGORY_COLORS[item.aircraft_category as keyof typeof CATEGORY_COLORS] || "#8884d8" }}>
+                      <Badge className="bg-[#555555] hover:bg-[#555555]/90 text-white">
                         {item.aircraft_category}
                       </Badge>
                     </td>
