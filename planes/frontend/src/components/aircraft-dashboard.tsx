@@ -32,7 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ScatterChart, Scatter, PieChart, Pie, Cell, Customized } from "recharts";
-import { Plane, TrendingUp, TrendingDown, Activity, Filter, X, MessageSquare } from "lucide-react";
+import { Plane, TrendingUp, TrendingDown, Activity, Filter, X, MessageSquare, Pause, Play } from "lucide-react";
 import ResizableChatLayout, { useChatLayout } from "@/components/resizable-chat-layout";
 
 interface AircraftData {
@@ -101,12 +101,15 @@ export function AircraftDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterParams>({});
+  const [activeFilters, setActiveFilters] = useState<FilterParams>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isLiveUpdatesEnabled, setIsLiveUpdatesEnabled] = useState(true);
 
-  const fetchData = async (filterParams: FilterParams = {}) => {
+  const fetchData = async (filterParams: FilterParams = {}, isPolling: boolean = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isPolling) setLoading(true);
+      if (!isPolling) setError(null);
 
       const queryParams = new URLSearchParams();
       Object.entries(filterParams).forEach(([key, value]) => {
@@ -115,7 +118,7 @@ export function AircraftDashboard() {
         }
       });
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const baseUrl = process.env.NEXT_PUBLIC_MOOSE_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       const response = await fetch(
         `${baseUrl}/aircraft/api/aircraftSpeedAltitudeByType?${queryParams}`
       );
@@ -126,28 +129,36 @@ export function AircraftDashboard() {
 
       const result = await response.json();
       setData(result);
+      setLastUpdated(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      if (!isPolling) setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setLoading(false);
+      if (!isPolling) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchData(activeFilters);
+    if (!isLiveUpdatesEnabled) return;
+    const interval = setInterval(() => {
+      fetchData(activeFilters, true);
+    }, 20000); // Polling interval for real-time updates
+    return () => clearInterval(interval);
+  }, [activeFilters, isLiveUpdatesEnabled]);
+
+
 
   const handleFilterChange = (key: keyof FilterParams, value: string | number | undefined) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const applyFilters = () => {
-    fetchData(filters);
+    setActiveFilters(filters);
   };
 
   const clearFilters = () => {
     setFilters({});
-    fetchData();
+    setActiveFilters({});
   };
 
   const totalAircraft = data.reduce((sum, item) => sum + parseInt(item.unique_aircraft_count), 0);
@@ -214,18 +225,51 @@ export function AircraftDashboard() {
         applyFilters={applyFilters}
         clearFilters={clearFilters}
         fetchData={fetchData}
+        lastUpdated={lastUpdated}
+        isLiveUpdatesEnabled={isLiveUpdatesEnabled}
+        setIsLiveUpdatesEnabled={setIsLiveUpdatesEnabled}
       />
     </ResizableChatLayout>
   );
 }
 
-function GaugeCard({ title, value, description, icon: Icon }: { title: string, value: React.ReactNode, description: string, icon: any }) {
+function GaugeCard({ title, value, description, icon: Icon, lastUpdated }: { title: string, value: React.ReactNode, description: string, icon: any, lastUpdated?: Date | null }) {
+  const updateKey = lastUpdated?.getTime() || 'init';
+  
   return (
     <div className="relative flex flex-col items-center justify-center p-6 w-64 h-64 mx-auto rounded-full">
+      <style>{`
+        @keyframes gaugePulse {
+          0% { box-shadow: 0 0 10px rgba(44,227,215,0.1); transform: scale(0.95); opacity: 0.8; }
+          40% { box-shadow: 0 0 60px rgba(44,227,215,0.8); transform: scale(1.05); opacity: 1; }
+          100% { box-shadow: 0 0 30px rgba(44,227,215,0.15); transform: scale(1); opacity: 1; }
+        }
+        @keyframes gaugeSpin {
+          0% { transform: rotate(-90deg) scale(0.95); }
+          50% { transform: rotate(-60deg) scale(1.02); }
+          100% { transform: rotate(-90deg) scale(1); }
+        }
+        @keyframes valPop {
+          0% { transform: scale(0.8) translateY(10px); opacity: 0; filter: blur(4px); }
+          50% { transform: scale(1.1) translateY(-2px); filter: blur(0px); }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+      `}</style>
+
       {/* Outer Cyan Glow behind ticks */}
-      <div className="absolute inset-2 rounded-full shadow-[0_0_30px_rgba(44,227,215,0.15)] pointer-events-none" />
+      <div 
+        key={`glow-${updateKey}`}
+        className="absolute inset-2 rounded-full pointer-events-none"
+        style={{ animation: 'gaugePulse 1s ease-out forwards', boxShadow: '0 0 30px rgba(44,227,215,0.15)' }}
+      />
+      
       {/* Ticks SVG */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none rounded-full" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+      <svg 
+        key={`svg-${updateKey}`}
+        className="absolute inset-0 w-full h-full pointer-events-none rounded-full" 
+        viewBox="0 0 100 100" 
+        style={{ animation: 'gaugeSpin 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards', transform: "rotate(-90deg)" }}
+      >
          {/* Inner Circle line */}
          <circle cx="50" cy="50" r="46" fill="none" stroke="#1B4C48" strokeWidth="0.5" />
          {Array.from({ length: 60 }).map((_, i) => (
@@ -241,13 +285,20 @@ function GaugeCard({ title, value, description, icon: Icon }: { title: string, v
            />
          ))}
       </svg>
+      
       {/* Content */}
       <div className="absolute top-[22%] flex flex-col items-center">
         <Icon className="w-5 h-5 text-[#E9E9E9] mb-1 opacity-80" />
         <h3 className="text-[#E9E9E9] text-sm font-medium">{title}</h3>
       </div>
       
-      <div className="text-5xl font-light text-[#2CE3D7] tracking-tight">{value}</div>
+      <div 
+        key={`val-${updateKey}`}
+        className="text-5xl font-light text-[#2CE3D7] tracking-tight"
+        style={{ animation: 'valPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+      >
+        {value}
+      </div>
       
       <div className="absolute bottom-[23%] w-[80%] flex justify-center">
         <p className="text-xs text-[#939393] text-center leading-tight">{description}</p>
@@ -272,6 +323,9 @@ function DashboardContent({
   applyFilters,
   clearFilters,
   fetchData,
+  lastUpdated,
+  isLiveUpdatesEnabled,
+  setIsLiveUpdatesEnabled,
 }: {
   data: AircraftData[];
   sortedData: AircraftData[];
@@ -288,6 +342,9 @@ function DashboardContent({
   applyFilters: () => void;
   clearFilters: () => void;
   fetchData: () => void;
+  lastUpdated: Date | null;
+  isLiveUpdatesEnabled: boolean;
+  setIsLiveUpdatesEnabled: (enabled: boolean) => void;
 }) {
   const { toggleChat } = useChatLayout();
 
@@ -361,107 +418,40 @@ function DashboardContent({
           <p className="text-muted-foreground">
             Real-time aircraft tracking data showing barometric altitude and ground speed by category
           </p>
+          <div className="flex items-center gap-2 mt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsLiveUpdatesEnabled(!isLiveUpdatesEnabled)}
+              className="h-6 px-2 text-[#2CE3D7]/80 hover:text-[#2CE3D7] hover:bg-[#2CE3D7]/10 -ml-2"
+            >
+              {isLiveUpdatesEnabled ? <Pause className="w-3 h-3 mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+              {isLiveUpdatesEnabled ? "Pause" : "Resume"}
+            </Button>
+            {isLiveUpdatesEnabled ? (
+              <span className="relative flex h-2 w-2 mr-1">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2CE3D7] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2CE3D7]"></span>
+              </span>
+            ) : (
+              <span className="flex h-2 w-2 mr-1 rounded-full bg-muted-foreground/50"></span>
+            )}
+            <p className={`text-sm ${isLiveUpdatesEnabled ? 'text-[#2CE3D7]/80' : 'text-muted-foreground/80'}`}>
+              {isLiveUpdatesEnabled ? "Live updates" : "Updates paused"} • Last active at {lastUpdated ? lastUpdated.toLocaleTimeString() : "..."}
+            </p>
+          </div>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2"
-        >
-          <Filter className="w-4 h-4" />
-          Filters
-        </Button>
+
       </div>
 
-      {/* Filters */}
-      {showFilters && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>
-              Filter aircraft data by category, altitude, and speed ranges
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Select value={filters.category || ""} onValueChange={(value) => handleFilterChange('category', value || undefined)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">All categories</SelectItem>
-                    {Object.entries(CATEGORY_DESCRIPTIONS).map(([key, desc]) => (
-                      <SelectItem key={key} value={key}>
-                        {key} - {desc}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
 
-              <div>
-                <Label htmlFor="minAltitude">Min Altitude (ft)</Label>
-                <Input
-                  id="minAltitude"
-                  type="number"
-                  placeholder="0"
-                  value={filters.minAltitude || ""}
-                  onChange={(e) => handleFilterChange('minAltitude', e.target.value ? parseInt(e.target.value) : undefined)}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="maxAltitude">Max Altitude (ft)</Label>
-                <Input
-                  id="maxAltitude"
-                  type="number"
-                  placeholder="50000"
-                  value={filters.maxAltitude || ""}
-                  onChange={(e) => handleFilterChange('maxAltitude', e.target.value ? parseInt(e.target.value) : undefined)}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="minSpeed">Min Speed (kts)</Label>
-                <Input
-                  id="minSpeed"
-                  type="number"
-                  placeholder="0"
-                  value={filters.minSpeed || ""}
-                  onChange={(e) => handleFilterChange('minSpeed', e.target.value ? parseInt(e.target.value) : undefined)}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="maxSpeed">Max Speed (kts)</Label>
-                <Input
-                  id="maxSpeed"
-                  type="number"
-                  placeholder="1000"
-                  value={filters.maxSpeed || ""}
-                  onChange={(e) => handleFilterChange('maxSpeed', e.target.value ? parseInt(e.target.value) : undefined)}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-4">
-              <Button onClick={applyFilters}>Apply Filters</Button>
-              <Button variant="outline" onClick={clearFilters}>
-                <X className="w-4 h-4 mr-2" />
-                Clear Filters
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 py-4">
-        <GaugeCard title="Total Aircraft" value={totalAircraft.toLocaleString()} description="Unique aircraft tracked" icon={Plane} />
-        <GaugeCard title="Total Records" value={totalRecords.toLocaleString()} description="Data points collected" icon={Activity} />
-        <GaugeCard title="Avg Altitude" value={`${avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} description="Barometric altitude" icon={TrendingUp} />
-        <GaugeCard title="Avg Speed" value={`${avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts`} description="Ground speed" icon={TrendingDown} />
+        <GaugeCard title="Total Aircraft" value={totalAircraft.toLocaleString()} description="Unique aircraft tracked" icon={Plane} lastUpdated={lastUpdated} />
+        <GaugeCard title="Total Records" value={totalRecords.toLocaleString()} description="Data points collected" icon={Activity} lastUpdated={lastUpdated} />
+        <GaugeCard title="Avg Altitude" value={`${avgAltitude.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} description="Barometric altitude" icon={TrendingUp} lastUpdated={lastUpdated} />
+        <GaugeCard title="Avg Speed" value={`${avgSpeed.toLocaleString(undefined, { maximumFractionDigits: 0 })} kts`} description="Ground speed" icon={TrendingDown} lastUpdated={lastUpdated} />
       </div>
 
       {/* Charts Grid */}
